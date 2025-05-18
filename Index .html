@@ -1,0 +1,126 @@
+<!DOCTYPE html><html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Health Trust Loan Portal</title>
+  <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-storage.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #f2f2f2; }
+    header { background: #005f73; color: white; padding: 20px; text-align: center; }
+    form, .section { background: white; margin: 20px auto; padding: 20px; border-radius: 8px; max-width: 500px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+    input, select, button { width: 100%; padding: 10px; margin: 10px 0; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Welcome to Health Trust Loan Portal</h1>
+  </header>  <!-- Phone Number Login -->  <div class="section" id="login-section">
+    <h2>Login with Phone Number</h2>
+    <input type="text" id="phone" placeholder="Enter Phone Number" />
+    <div id="recaptcha-container"></div>
+    <button onclick="sendOTP()">Send OTP</button>
+    <input type="text" id="otp" placeholder="Enter OTP" class="hidden" />
+    <button onclick="verifyOTP()" class="hidden" id="verify-btn">Verify OTP</button>
+  </div>  <!-- KYC Form -->  <form id="kyc-form" class="hidden">
+    <h2>KYC Form</h2>
+    <input type="text" id="name" placeholder="Full Name" required />
+    <input type="date" id="dob" required />
+    <input type="text" id="aadhar" placeholder="Aadhar Number" required />
+    <input type="text" id="pan" placeholder="PAN Number" required />
+    <label>Upload KYC Document:</label>
+    <input type="file" id="kyc-doc" required /><label>Upload Hospital Document:</label>
+<input type="file" id="hospital-doc" required />
+
+<label>Select Hospital:</label>
+<select id="hospital">
+  <option value="">--Select Hospital--</option>
+  <option>Apollo Hospital</option>
+  <option>AIIMS Delhi</option>
+  <option>Tata Memorial Hospital</option>
+  <option>Fortis Healthcare</option>
+  <!-- Add more hospitals -->
+</select>
+
+<input type="number" id="credit-score" placeholder="Enter Credit Score" required />
+
+<button type="submit">Submit Application</button>
+
+  </form>  <script>
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_PROJECT.firebaseapp.com",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_PROJECT.appspot.com",
+      messagingSenderId: "YOUR_SENDER_ID",
+      appId: "YOUR_APP_ID"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+    const storage = firebase.storage();
+
+    window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
+      'size': 'normal',
+      'callback': function(response) {
+        // reCAPTCHA solved
+      }
+    });
+
+    function sendOTP() {
+      const phone = document.getElementById("phone").value;
+      const appVerifier = window.recaptchaVerifier;
+      auth.signInWithPhoneNumber(phone, appVerifier)
+        .then(confirmationResult => {
+          window.confirmationResult = confirmationResult;
+          document.getElementById("otp").classList.remove("hidden");
+          document.getElementById("verify-btn").classList.remove("hidden");
+        })
+        .catch(error => alert(error.message));
+    }
+
+    function verifyOTP() {
+      const code = document.getElementById("otp").value;
+      window.confirmationResult.confirm(code).then(result => {
+        document.getElementById("login-section").classList.add("hidden");
+        document.getElementById("kyc-form").classList.remove("hidden");
+      }).catch(err => alert("OTP verification failed."));
+    }
+
+    document.getElementById("kyc-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const score = parseInt(document.getElementById("credit-score").value);
+      if (score < 750) return alert("Loan cannot be given. Credit score too low.");
+
+      const name = document.getElementById("name").value;
+      const dob = document.getElementById("dob").value;
+      const aadhar = document.getElementById("aadhar").value;
+      const pan = document.getElementById("pan").value;
+      const hospital = document.getElementById("hospital").value;
+
+      const kycDoc = document.getElementById("kyc-doc").files[0];
+      const hospDoc = document.getElementById("hospital-doc").files[0];
+
+      const user = auth.currentUser;
+      const uid = user ? user.uid : 'unknown';
+
+      const kycRef = storage.ref().child(`kyc/${uid}/${kycDoc.name}`);
+      const hospRef = storage.ref().child(`hospital_docs/${uid}/${hospDoc.name}`);
+
+      await kycRef.put(kycDoc);
+      await hospRef.put(hospDoc);
+
+      await db.collection("applications").add({
+        uid, name, dob, aadhar, pan, hospital, creditScore: score,
+        kycDocURL: await kycRef.getDownloadURL(),
+        hospitalDocURL: await hospRef.getDownloadURL(),
+        createdAt: new Date()
+      });
+
+      alert("Application submitted successfully!");
+    });
+  </script></body>
+</html>
